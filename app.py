@@ -240,9 +240,10 @@ def build_opts(fmt: str, hooks) -> dict:
         opts.update(
             {
                 # Tope de resolución para no saturar disco/banda ancha en hosting.
+                # Sin exigir ext=mp4/m4a: algunos clientes (android/tv) solo dan
+                # streams combinados; merge_output_format se encarga del remux.
                 "format": (
-                    f"bestvideo[ext=mp4][height<={MAX_HEIGHT}]+bestaudio[ext=m4a]"
-                    f"/bestvideo[height<={MAX_HEIGHT}]+bestaudio"
+                    f"bestvideo[height<={MAX_HEIGHT}]+bestaudio"
                     f"/best[height<={MAX_HEIGHT}]/best"
                 ),
                 "merge_output_format": "mp4",
@@ -285,8 +286,19 @@ def process_job(job_id: str, url: str, fmt: str) -> None:
 
     try:
         opts = build_opts(fmt, [hook])
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True) or {}
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True) or {}
+        except Exception as e1:
+            # YouTube a veces ofrece formatos limitados (experimento SABR):
+            # si la selección falla, reintenta aceptando lo que haya.
+            if "requested format is not available" in str(e1).lower():
+                opts_retry = dict(opts)
+                opts_retry["format"] = "best"
+                with yt_dlp.YoutubeDL(opts_retry) as ydl:
+                    info = ydl.extract_info(url, download=True) or {}
+            else:
+                raise
 
         title = info.get("title") or "video"
         fname = None
