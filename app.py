@@ -201,6 +201,13 @@ def _load_cookiefile():
 
 COOKIEFILE = _load_cookiefile()
 
+# Clientes de YouTube que yt-dlp intentará, en orden. Sin cookies (hosting),
+# los clientes no-web (android/ios/tv) suelen esquivar el muro anti-bot de las
+# IPs de datacenter; con cookies, "default" es la vía probada.
+PLAYER_CLIENTS = os.environ.get("YTDLP_PLAYER_CLIENTS", "").strip() or (
+    "default" if COOKIEFILE else "android,ios,tv,default"
+)
+
 
 def build_opts(fmt: str, hooks) -> dict:
     opts = {
@@ -210,6 +217,7 @@ def build_opts(fmt: str, hooks) -> dict:
         "progress_hooks": hooks,
         "socket_timeout": 30,
         "retries": 2,
+        "extractor_args": {"youtube:player_client": PLAYER_CLIENTS},
     }
     if FFMPEG_EXE:
         opts["ffmpeg_location"] = FFMPEG_EXE
