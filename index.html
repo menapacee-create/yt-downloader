@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>YT Downloader · MP3 / MP4</title>
+<style>
+  :root {
+    --bg: #0d0f17;
+    --card: #151827;
+    --card-border: #262b40;
+    --text: #eef0f8;
+    --muted: #9aa3c0;
+    --accent: #ff3d3d;
+    --accent-2: #ff7a18;
+    --ok: #2fd67b;
+    --err: #ff5470;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 80% -10%, rgba(255,61,61,.14), transparent 60%),
+      radial-gradient(700px 500px at 10% 110%, rgba(255,122,24,.10), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px;
+    padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 580px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 34px 32px 28px;
+    box-shadow: 0 30px 60px rgba(0,0,0,.45);
+  }
+  .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .play-btn {
+    width: 46px; height: 32px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,61,61,.35);
+    flex-shrink: 0;
+  }
+  .play-btn svg { width: 14px; height: 14px; fill: #fff; margin-left: 2px; }
+  h1 { font-size: 22px; letter-spacing: .3px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 26px; }
+
+  label.field-label { display:block; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  input[type="text"] {
+    width: 100%; padding: 14px 16px;
+    background: #0f1220; color: var(--text);
+    border: 1px solid var(--card-border); border-radius: 12px;
+    font-size: 15px; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255,61,61,.18);
+  }
+
+  .formats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  .fmt {
+    position: relative; cursor: pointer; user-select: none;
+    border: 1px solid var(--card-border); border-radius: 14px;
+    padding: 16px 14px; text-align: center;
+    background: #0f1220; transition: all .15s ease;
+  }
+  .fmt:hover { border-color: #3a4160; transform: translateY(-1px); }
+  .fmt input { position: absolute; opacity: 0; pointer-events: none; }
+  .fmt.selected {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, rgba(255,61,61,.14), rgba(255,122,24,.07));
+    box-shadow: 0 0 0 3px rgba(255,61,61,.15);
+  }
+  .fmt .icon { font-size: 26px; display: block; margin-bottom: 8px; }
+  .fmt .name { font-weight: 700; font-size: 15px; }
+  .fmt .desc { color: var(--muted); font-size: 12px; margin-top: 3px; }
+
+  .btn-main {
+    width: 100%; margin-top: 22px; padding: 15px;
+    border: none; border-radius: 12px; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff; font-size: 16px; font-weight: 700; letter-spacing: .3px;
+    box-shadow: 0 10px 28px rgba(255,61,61,.35);
+    transition: transform .12s ease, opacity .15s;
+  }
+  .btn-main:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-main:disabled { opacity: .55; cursor: not-allowed; }
+
+  /* Estado / progreso */
+  #statusBox { display: none; margin-top: 24px; }
+  .spinner-row { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
+  .spinner {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2.5px solid #333a56; border-top-color: var(--accent);
+    animation: spin .8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .track { height: 12px; background: #0f1220; border-radius: 999px; overflow: hidden; margin-top: 14px; border: 1px solid var(--card-border); }
+  .fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 999px; transition: width .4s ease;
+  }
+  .meta-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  #videoTitle { font-weight: 600; color: var(--text); font-size: 14px; margin-bottom: 2px; overflow-wrap: anywhere; }
+
+  .done-box, .error-box { display: none; border-radius: 14px; padding: 18px; margin-top: 4px; }
+  .done-box { background: rgba(47,214,123,.09); border: 1px solid rgba(47,214,123,.35); }
+  .error-box { background: rgba(255,84,112,.09); border: 1px solid rgba(255,84,112,.4); color: #ffb3c0; font-size: 14px; overflow-wrap: anywhere; }
+  .done-title { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 6px; }
+  .check {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--ok); color: #04281a;
+    display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;
+  }
+  .file-name { color: var(--muted); font-size: 13px; margin-bottom: 14px; overflow-wrap: anywhere; }
+  .btn-save {
+    display: inline-block; padding: 12px 22px; border-radius: 10px; text-decoration: none;
+    background: var(--ok); color: #04281a; font-weight: 700; font-size: 15px;
+    box-shadow: 0 8px 22px rgba(47,214,123,.3); transition: transform .12s ease;
+  }
+  .btn-save:hover:not(:disabled) { transform: translateY(-1px); }
+  .btn-save:disabled { opacity: .6; cursor: wait; }
+  .save-hint { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  /* Espacios de publicidad (AdSense): quedan invisibles hasta que pegues el código */
+  .ad-slot { display: none; width: 100%; max-width: 728px; }
+  .ad-slot:not(:empty) {
+    display: block; text-align: center; padding: 8px 0;
+    border-top: 1px dashed #2a3050; border-bottom: 1px dashed #2a3050;
+  }
+  .ad-slot:not(:empty)::before {
+    content: "Publicidad"; display: block; font-size: 10px;
+    letter-spacing: 1.5px; text-transform: uppercase; color: #4d5474; margin-bottom: 6px;
+  }
+
+  footer { margin-top: 26px; text-align: center; color: #5b6280; font-size: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <!-- ===== PUBLICIDAD (AdSense) — pegá DENTRO de este div el código <ins class="adsbygoogle"> que te dé Google ===== -->
+  <div class="ad-slot" id="adTop"></div>
+
+  <div class="card">
+    <div class="logo">
+      <div class="play-btn"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+      <h1>YT Downloader</h1>
+    </div>
+    <p class="subtitle">Pegá el enlace de YouTube y elegí si querés solo audio o el video completo.</p>
+
+    <label class="field-label" for="urlInput">Enlace del video</label>
+    <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" spellcheck="false" />
+
+    <div class="formats">
+      <label class="fmt selected" id="fmtMp3">
+        <input type="radio" name="fmt" value="mp3" checked />
+        <span class="icon">🎵</span>
+        <span class="name">MP3 · Audio</span>
+        <span class="desc">Solo la música / voz, 192 kbps</span>
+      </label>
+      <label class="fmt" id="fmtMp4">
+        <input type="radio" name="fmt" value="mp4" />
+        <span class="icon">🎬</span>
+        <span class="name">MP4 · Video</span>
+        <span class="desc">Video + audio en la mejor calidad</span>
+      </label>
+    </div>
+
+    <button class="btn-main" id="downloadBtn">⬇ Descargar</button>
+
+    <div id="statusBox">
+      <div id="videoTitle"></div>
+      <div class="spinner-row"><div class="spinner"></div><span id="phaseText">Preparando descarga…</span></div>
+      <div class="track"><div class="fill" id="progressFill"></div></div>
+      <div class="meta-row"><span id="pctText">0%</span><span id="speedText"></span></div>
+
+      <div class="done-box" id="doneBox">
+        <div class="done-title"><span class="check">✓</span> ¡Listo!</div>
+        <div class="file-name" id="fileName"></div>
+        <button class="btn-save" id="saveLink" type="button">💾 Guardar archivo</button>
+        <p class="save-hint">Se guardará en tu carpeta de <b>Descargas</b>.</p>
+      </div>
+
+      <div class="error-box" id="errorBox"></div>
+    </div>
+
+    <footer>Los archivos descargados se conservan en el servidor por unas horas y luego se eliminan solos.</footer>
+  </div>
+
+  <!-- ===== PUBLICIDAD (AdSense) — pegá DENTRO de este div otro bloque <ins class="adsbygoogle"> si querés un segundo banner ===== -->
+  <div class="ad-slot" id="adBottom"></div>
+
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const urlInput = $("#urlInput");
+  const downloadBtn = $("#downloadBtn");
+  const statusBox = $("#statusBox");
+  const progressFill = $("#progressFill");
+  const pctText = $("#pctText");
+  const speedText = $("#speedText");
+  const phaseText = $("#phaseText");
+  const videoTitle = $("#videoTitle");
+  const doneBox = $("#doneBox");
+  const errorBox = $("#errorBox");
+  const saveLink = $("#saveLink");
+
+  let pollTimer = null;
+  let currentJob = null; // { id, filename }
+
+  // Selección de formato
+  document.querySelectorAll(".fmt input").forEach((radio) => {
+    radio.addEventListener("change", () => {
+      document.querySelectorAll(".fmt").forEach((el) => el.classList.remove("selected"));
+      radio.closest(".fmt").classList.add("selected");
+    });
+  });
+
+  function selectedFmt() {
+    return document.querySelector(".fmt input:checked").value;
+  }
+
+  function resetStatus() {
+    clearInterval(pollTimer);
+    statusBox.style.display = "block";
+    doneBox.style.display = "none";
+    errorBox.style.display = "none";
+    videoTitle.textContent = "";
+    progressFill.style.width = "0%";
+    pctText.textContent = "0%";
+    speedText.textContent = "";
+    phaseText.textContent = "Preparando descarga…";
+    currentJob = null;
+  }
+
+  function showError(msg) {
+    clearInterval(pollTimer);
+    doneBox.style.display = "none";
+    errorBox.textContent = msg;
+    errorBox.style.display = "block";
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = "⬇ Descargar";
+  }
+
+  function poll(jobId) {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch("/api/status/" + jobId);
+        if (!res.ok) throw new Error("Tarea no encontrada");
+        const job = await res.json();
+
+        if (job.title) videoTitle.textContent = job.title;
+        progressFill.style.width = job.progress.toFixed(1) + "%";
+        pctText.textContent = Math.floor(job.progress) + "%";
+        speedText.textContent = job.speed || "";
+
+        if (job.status === "processing") {
+          phaseText.textContent = job.progress >= 99 ? "Procesando archivo…" : "Descargando…";
+        } else if (job.status === "done") {
+          clearInterval(pollTimer);
+          progressFill.style.width = "100%";
+          pctText.textContent = "100%";
+          phaseText.textContent = "Completado";
+          videoTitle.textContent = job.title || "";
+          $("#fileName").textContent = (job.filename || "") + (job.size_human ? " · " + job.size_human : "");
+          currentJob = { id: jobId, filename: job.filename };
+          doneBox.style.display = "block";
+          downloadBtn.disabled = false;
+          downloadBtn.textContent = "⬇ Descargar otro";
+        } else if (job.status === "error") {
+          showError(job.error || "Ocurrió un error inesperado.");
+        }
+      } catch (e) {
+        clearInterval(pollTimer);
+        showError("No se pudo conectar con el servidor: " + e.message);
+      }
+    }, 900);
+  }
+
+  async function startDownload() {
+    const url = urlInput.value.trim();
+    if (!url) {
+      urlInput.focus();
+      return;
+    }
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "Descargando…";
+    resetStatus();
+    try {
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, fmt: selectedFmt() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Error al iniciar la descarga");
+      }
+      const data = await res.json();
+      poll(data.job_id);
+    } catch (e) {
+      showError(e.message);
+    }
+  }
+
+  async function saveFile() {
+    if (!currentJob || saveLink.disabled) return;
+    const btn = saveLink;
+    btn.disabled = true;
+    btn.textContent = "⏳ Preparando…";
+    try {
+      // Bajamos el archivo como blob y lo guardamos con un clic programático:
+      // funciona de forma fiable en navegadores normales y embebidos.
+      const res = await fetch("/file/" + currentJob.id);
+      if (!res.ok) throw new Error("no disponible");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = currentJob.filename || "descarga";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      btn.textContent = "✅ Guardado en Descargas";
+    } catch (e) {
+      // Fallback: abrir el archivo en una pestaña nueva.
+      window.open("/file/" + currentJob.id, "_blank");
+      btn.textContent = "💾 Abrir en pestaña nueva";
+    } finally {
+      setTimeout(() => { btn.disabled = false; }, 1500);
+    }
+  }
+
+  saveLink.addEventListener("click", saveFile);
+  downloadBtn.addEventListener("click", startDownload);
+  urlInput.addEventListener("keydown", (e) => { if (e.key === "Enter") startDownload(); });
+})();
+</script>
+</body>
+</html>

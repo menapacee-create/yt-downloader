@@ -1,0 +1,4 @@
+flask>=3.0
+yt-dlp>=2024.10.0
+imageio-ffmpeg>=0.5.1
+waitress>=3.0
