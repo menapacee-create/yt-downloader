@@ -12,6 +12,10 @@ Hosting (Render, Railway, VPS, etc.):
 Variables de entorno opcionales:
     PORT              puerto (default 5000)
     HOST              interfaz a escuchar (default 127.0.0.1; en hosting usar 0.0.0.0)
+    YTDLP_COOKIES     contenido completo de un cookies.txt (Netscape) para
+                      autenticar ante YouTube. En hosting es casi siempre
+                      necesario: las IPs de datacenter reciben el muro
+                      "Sign in to confirm you're not a bot".
     RATE_LIMIT        descargas máximas por IP por minuto (default 5)
     MAX_CONCURRENT    descargas simultáneas en todo el servidor (default 3)
     FILE_TTL_HOURS    horas que un archivo descargado queda disponible (default 6)
@@ -173,6 +177,31 @@ def find_ffmpeg():
 FFMPEG_EXE = find_ffmpeg()
 
 
+def _load_cookiefile():
+    """Devuelve la ruta de un cookies.txt para yt-dlp, o None.
+
+    Fuentes (en orden):
+      1. Variable de entorno YTDLP_COOKIES con el contenido completo del
+         archivo (usado en Render como *secret*; se escribe a disco al arrancar).
+      2. Archivo cookies.txt junto a app.py (uso local o repo privado).
+    """
+    env = os.environ.get("YTDLP_COOKIES", "").strip()
+    if env:
+        p = BASE_DIR / ".cookies_env.txt"
+        try:
+            p.write_text(env, encoding="utf-8")
+            return str(p)
+        except OSError:
+            pass
+    local = BASE_DIR / "cookies.txt"
+    if local.is_file():
+        return str(local)
+    return None
+
+
+COOKIEFILE = _load_cookiefile()
+
+
 def build_opts(fmt: str, hooks) -> dict:
     opts = {
         "outtmpl": str(DOWNLOADS_DIR / "%(id)s.%(ext)s"),
@@ -184,6 +213,8 @@ def build_opts(fmt: str, hooks) -> dict:
     }
     if FFMPEG_EXE:
         opts["ffmpeg_location"] = FFMPEG_EXE
+    if COOKIEFILE:
+        opts["cookiefile"] = COOKIEFILE
     if fmt == "mp3":
         opts.update(
             {
@@ -294,7 +325,12 @@ def process_job(job_id: str, url: str, fmt: str) -> None:
                     "URL no soportada. Verificá que sea un enlace de YouTube válido."
                 )
             elif "video unavailable" in low or "private video" in low:
-                job["error"] = "El video no está disponible (puede ser privado o eliminado)."
+                job["error"] = "El video no está disponible (puede ser privado, eliminado o restringido por región)."
+            elif "sign in to confirm" in low or "not a bot" in low:
+                job["error"] = (
+                    "YouTube bloqueó la descarga con su muro anti-bot. En hosting se "
+                    "resuelve agregando cookies de tu cuenta (variable YTDLP_COOKIES)."
+                )
             else:
                 job["error"] = f"Error al descargar: {msg[:300]}"
 

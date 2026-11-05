@@ -36,6 +36,7 @@ Los archivos descargados quedan en la carpeta `downloads/` y se eliminan solos p
 | `MAX_CONCURRENT` | `3`         | Descargas simultáneas en todo el servidor              |
 | `FILE_TTL_HOURS` | `6`         | Horas que un archivo descargado queda disponible       |
 | `MAX_HEIGHT`     | `1080`      | Tope de resolución para MP4 (ahorra disco y banda)     |
+| `YTDLP_COOKIES`  | —           | Contenido completo de un `cookies.txt` (Netscape). En hosting es casi siempre necesario: YouTube bloquea las IPs de datacenter con el muro "Sign in to confirm you're not a bot". Alternativa local: archivo `cookies.txt` junto a `app.py`. **Nunca lo subas a un repo público.** |
 
 ## Seguridad incluida
 
@@ -59,7 +60,8 @@ yt-dlp corre en el servidor, así que necesitás un hosting que ejecute Python
 2. En [Render](https://render.com) (o Railway): *New → Web Service*, elegí el repo.
 3. Build command: `pip install -r requirements.txt` · Start command: `python app.py`.
 4. Seteá la variable de entorno `HOST=0.0.0.0` (el puerto lo detecta solo).
-5. Listo: te da una URL tipo `https://tu-app.onrender.com`.
+5. **Cookies para YouTube** (casi siempre necesario en hosting): instalá la extensión "Get cookies.txt LOCALLY" en tu navegador, entrá a youtube.com **logueado**, exportá las cookies de `youtube.com` como texto y pegalo todo como *secret* `YTDLP_COOKIES` en Render → Environment. Las cookies caducan cada pocas semanas: si vuelve el error anti-bot, repetí la exportación.
+6. Listo: te da una URL tipo `https://tu-app.onrender.com`.
 
 > En Render, el plan gratuito "duerme" tras ~15 min sin uso; la primera descarga después de estar inactivo tarda unos segundos en despertar. Para uso serio, el plan Starter (~$7/mes) lo mantiene despierto.
 
