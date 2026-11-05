@@ -12,10 +12,10 @@ Hosting (Render, Railway, VPS, etc.):
 Variables de entorno opcionales:
     PORT              puerto (default 5000)
     HOST              interfaz a escuchar (default 127.0.0.1; en hosting usar 0.0.0.0)
-    YTDLP_COOKIES     contenido completo de un cookies.txt (Netscape) para
-                      autenticar ante YouTube. En hosting es casi siempre
-                      necesario: las IPs de datacenter reciben el muro
-                      "Sign in to confirm you're not a bot".
+    YTDLP_COOKIES     opcional: contenido de un cookies.txt (Netscape) para
+                      autenticar ante YouTube. Mejora la tasa de éxito en
+                      hosting, pero no es obligatorio.
+    YTDLP_PLAYER_CLIENTS  lista personalizada de clientes de yt-dlp.
     RATE_LIMIT        descargas máximas por IP por minuto (default 5)
     MAX_CONCURRENT    descargas simultáneas en todo el servidor (default 3)
     FILE_TTL_HOURS    horas que un archivo descargado queda disponible (default 6)
@@ -201,15 +201,22 @@ def _load_cookiefile():
 
 COOKIEFILE = _load_cookiefile()
 
-# Clientes de YouTube que yt-dlp intentará, en orden. Sin cookies (hosting),
-# los clientes no-web (android/ios/tv) suelen esquivar el muro anti-bot de las
-# IPs de datacenter; con cookies, "default" es la vía probada.
-PLAYER_CLIENTS = os.environ.get("YTDLP_PLAYER_CLIENTS", "").strip() or (
-    "default" if COOKIEFILE else "android,ios,tv,default"
-)
+# Conjuntos de clientes de YouTube que yt-dlp intentará. El muro anti-bot de
+# las IPs de datacenter es intermitente: si el primer conjunto falla (muro o
+# formatos limitados por el experimento SABR), se reintenta con el siguiente.
+_env_clients = os.environ.get("YTDLP_PLAYER_CLIENTS", "").strip()
+if _env_clients:
+    CLIENT_SETS = [_env_clients]
+elif COOKIEFILE:
+    CLIENT_SETS = ["default"]
+else:
+    CLIENT_SETS = [
+        "android,ios,tv,default",            # principal (alta calidad)
+        "mweb,web_embedded,tv,android,ios",  # respaldo (más permisivos primero)
+    ]
 
 
-def build_opts(fmt: str, hooks) -> dict:
+def build_opts(fmt: str, hooks, clients: str | None = None) -> dict:
     opts = {
         "outtmpl": str(DOWNLOADS_DIR / "%(id)s.%(ext)s"),
         "quiet": True,
@@ -217,7 +224,7 @@ def build_opts(fmt: str, hooks) -> dict:
         "progress_hooks": hooks,
         "socket_timeout": 30,
         "retries": 2,
-        "extractor_args": {"youtube:player_client": PLAYER_CLIENTS},
+        "extractor_args": {"youtube:player_client": clients or CLIENT_SETS[0]},
     }
     if FFMPEG_EXE:
         opts["ffmpeg_location"] = FFMPEG_EXE
@@ -284,20 +291,27 @@ def process_job(job_id: str, url: str, fmt: str) -> None:
             elif status == "finished":
                 job["progress"] = max(job["progress"], 99.0)
 
+    def _retryable(msg_low: str) -> bool:
+        # Errores que valen la pena reintentar con otro conjunto de clientes:
+        # muro anti-bot (intermitente) o formatos limitados (experimento SABR).
+        return (
+            "requested format is not available" in msg_low
+            or "sign in to confirm" in msg_low
+            or "not a bot" in msg_low
+        )
+
     try:
-        opts = build_opts(fmt, [hook])
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True) or {}
-        except Exception as e1:
-            # YouTube a veces ofrece formatos limitados (experimento SABR):
-            # si la selección falla, reintenta aceptando lo que haya.
-            if "requested format is not available" in str(e1).lower():
-                opts_retry = dict(opts)
-                opts_retry["format"] = "best"
-                with yt_dlp.YoutubeDL(opts_retry) as ydl:
+        info = None
+        for attempt, clients in enumerate(CLIENT_SETS):
+            opts = build_opts(fmt, [hook], clients=clients)
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=True) or {}
-            else:
+                break  # éxito
+            except Exception as e1:
+                if attempt + 1 < len(CLIENT_SETS) and _retryable(str(e1).lower()):
+                    time.sleep(5)  # el muro es intermitente; esperar ayuda
+                    continue
                 raise
 
         title = info.get("title") or "video"
@@ -348,8 +362,8 @@ def process_job(job_id: str, url: str, fmt: str) -> None:
                 job["error"] = "El video no está disponible (puede ser privado, eliminado o restringido por región)."
             elif "sign in to confirm" in low or "not a bot" in low:
                 job["error"] = (
-                    "YouTube bloqueó la descarga con su muro anti-bot. En hosting se "
-                    "resuelve agregando cookies de tu cuenta (variable YTDLP_COOKIES)."
+                    "YouTube bloqueó temporalmente la descarga desde el servidor. "
+                    "Esperá unos segundos y volvé a intentarlo."
                 )
             else:
                 job["error"] = f"Error al descargar: {msg[:300]}"
