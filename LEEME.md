@@ -60,7 +60,9 @@ yt-dlp corre en el servidor, así que necesitás un hosting que ejecute Python
 2. En [Render](https://render.com) (o Railway): *New → Web Service*, elegí el repo.
 3. Build command: `pip install -r requirements.txt` · Start command: `python app.py`.
 4. Seteá la variable de entorno `HOST=0.0.0.0` (el puerto lo detecta solo).
-5. **Cookies para YouTube** (casi siempre necesario en hosting): instalá la extensión "Get cookies.txt LOCALLY" en tu navegador, entrá a youtube.com **logueado**, exportá las cookies de `youtube.com` como texto y pegalo todo como *secret* `YTDLP_COOKIES` en Render → Environment. Las cookies caducan cada pocas semanas: si vuelve el error anti-bot, repetí la exportación.
+5. **Cookies para YouTube** (casi siempre necesario en hosting): instalá la extensión "Get cookies.txt LOCALLY" en tu navegador, entrá a youtube.com **logueado**, exportá las cookies de `youtube.com` como texto y pegalo todo como *secret* `YTDLP_COOKIES` en Render → Environment. Después tocá **Manual Deploy** para que se aplique.
+   - Para verificar que están cargadas: abrí `https://tu-app.onrender.com/api/debug` — debe responder `{"cookies_loaded": true, ...}`.
+   - Las cookies caducan cada pocas semanas/meses: si vuelve el error anti-bot, repetí la exportación, actualizá el valor de `YTDLP_COOKIES` en Render → Environment y tocá **Manual Deploy**.
 6. Listo: te da una URL tipo `https://tu-app.onrender.com`.
 
 > En Render, el plan gratuito "duerme" tras ~15 min sin uso; la primera descarga después de estar inactivo tarda unos segundos en despertar. Para uso serio, el plan Starter (~$7/mes) lo mantiene despierto.
@@ -95,6 +97,7 @@ tudominio.com {
 ## Solución de problemas
 
 - **El botón "Guardar archivo" no hace nada**: usá un navegador normal (Chrome/Edge/Firefox). En navegadores embebidos dentro de otras apps a veces el diálogo de guardado se comporta distinto; si pasa, el botón abre el archivo en una pestaña nueva y podés guardarlo desde ahí.
+- **"YouTube bloqueó temporalmente la descarga desde el servidor"**: es el muro anti-bot de YouTube contra las IPs de datacenter. Si aparece seguido, refrescá las cookies (`YTDLP_COOKIES`) como se indica arriba y verificá con `/api/debug`.
 - **Error 429**: esperá unos segundos (límite de descargas por minuto).
 - **"El video no está disponible"**: el video es privado, eliminado o tiene restricciones regionales.
 - **Aviso de yt-dlp sobre "JavaScript runtime" en la consola**: es solo un aviso; las descargas funcionan igual. Si algún día faltaran formatos, instalá [Node.js](https://nodejs.org) (o deno) y reiniciá el servidor.

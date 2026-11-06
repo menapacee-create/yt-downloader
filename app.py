@@ -207,9 +207,12 @@ COOKIEFILE = _load_cookiefile()
 _env_clients = os.environ.get("YTDLP_PLAYER_CLIENTS", "").strip()
 if _env_clients:
     CLIENT_SETS = [_env_clients]
-elif COOKIEFILE:
-    CLIENT_SETS = ["default"]
 else:
+    # Rotación de clientes: el muro anti-bot de las IPs de datacenter es
+    # intermitente y no siempre se evita con cookies de sesión, así que si el
+    # primer conjunto falla (muro o formatos limitados por SABR), se reintenta
+    # con el siguiente. Con cookies cargadas, los clientes no-web (tv/android)
+    # suelen pasar ese muro mejor que "default".
     CLIENT_SETS = [
         "android,ios,tv,default",            # principal (alta calidad)
         "mweb,web_embedded,tv,android,ios",  # respaldo (más permisivos primero)
@@ -433,6 +436,23 @@ def api_status(job_id):
         if not job:
             return jsonify(error="Tarea no encontrada."), 404
         return jsonify(dict(job))
+
+
+@app.get("/api/debug")
+def api_debug():
+    """Diagnóstico para el dueño del sitio: confirma si las cookies de sesión
+    están cargadas en la instancia actual. No expone datos sensibles."""
+    n_lines = 0
+    if COOKIEFILE and Path(COOKIEFILE).is_file():
+        try:
+            n_lines = len(Path(COOKIEFILE).read_text(encoding="utf-8").splitlines())
+        except OSError:
+            n_lines = -1
+    return jsonify(
+        cookies_loaded=bool(COOKIEFILE),
+        cookie_lines=n_lines,
+        client_sets=CLIENT_SETS,
+    )
 
 
 @app.get("/file/<job_id>")
